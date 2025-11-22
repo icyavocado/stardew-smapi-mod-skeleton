@@ -1,0 +1,108 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 <command> [args]"
+    echo "Commands:"
+    for cmd in "${!COMMANDS[@]}"; do
+        printf "  %-12s %s\n" "$cmd" "${COMMANDS[$cmd]#*|}"
+    done
+}
+
+# Single function to run an arbitrary command inside the container
+exec_in_container() {
+    if [ $# -eq 0 ]; then
+        echo "Error: no command provided to exec"
+        return 2
+    fi
+    # Join args safely preserving quoting
+    local inner_cmd
+    printf -v inner_cmd "%q " "$@"
+    inner_cmd=${inner_cmd% }   # trim trailing space
+    docker-compose exec stardev_smapi_mod /bin/bash -lc "$inner_cmd"
+}
+
+build_project() {
+    local project_name=${1:-}
+    if [ -z "$project_name" ]; then
+        echo "Error: project name required"
+        return 2
+    fi
+    local csproj="/home/app/src/$project_name/$project_name.csproj"
+    exec_in_container dotnet build "$csproj"
+}
+
+# Restart supervisor-managed processes. Pass process names as args.
+restart_processes() {
+    if [ $# -eq 0 ]; then
+        echo "Error: no process name(s) provided to restart"
+        return 2
+    fi
+    local args
+    printf -v args "%q " "$@"
+    args=${args% }
+    exec_in_container bash -lc "cd /home/app && supervisorctl restart $args"
+}
+
+# Docker compose wrappers (run on host)
+compose_down() {
+    docker compose down
+}
+
+compose_up() {
+    # Run in attached mode by default; pass additional args if provided
+    if [ $# -gt 0 ]; then
+        docker compose up "$@"
+    else
+        docker compose up
+    fi
+}
+
+compose_logs() {
+    # Follow logs by default; additional service names can be passed
+    if [ $# -gt 0 ]; then
+        docker compose logs -f "$@"
+    else
+        docker compose logs -f
+    fi
+}
+
+declare -A COMMANDS=(
+    [build]="build_project|Build the specified project"
+    [exec]="exec_in_container|Execute a command inside the container"
+    [restart]="restart_processes|Restart supervisor-managed process(es) inside container (pass names)"
+    [down]="compose_down|Run 'docker compose down' on the host"
+    [up]="compose_up|Run 'docker compose up' on the host (pass extra args to docker compose up)"
+    [logs]="compose_logs|Run 'docker compose logs -f' on the host (optionally pass services)"
+)
+
+docker_cmd() {
+    if [ -z "${1:-}" ]; then
+        echo "Error: No command provided."
+        usage
+        return 1
+    fi
+    local cmd_key=$1; shift
+    local entry=${COMMANDS[$cmd_key]:-}
+    if [ -z "$entry" ]; then
+        echo "Error: Unknown command '$cmd_key'."
+        usage
+        return 1
+    fi
+    local func_name="${entry%%|*}"
+    if ! declare -F "$func_name" >/dev/null; then
+        echo "Error: handler '$func_name' not found for '$cmd_key'."
+        return 3
+    fi
+    "$func_name" "$@"
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    if [ $# -eq 0 ]; then
+        echo "Error: No command provided."
+        usage
+        exit 1
+    fi
+    docker_cmd "$@"
+fi
+
