@@ -1,0 +1,6 @@
+install_directory/**
+!install_directory/PUT_YOUR_GAME_FILES_HERE.txt
+mods/**
+!mods/PUT_YOUR_MODS_HERE.txt
+saves/**
+!saves/PUT_YOUR_SAVES_HERE.txt

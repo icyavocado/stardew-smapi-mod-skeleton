@@ -1,0 +1,16 @@
+services:
+  stardev_valley_mod:
+    build: .
+    container_name: 'stardev_valley'
+    volumes:
+      - ./install_directory:/home/app/games:ro
+      - ./mods:/home/app/games/game/Mods:ro
+      - ./saves:/home/app/.config/StardewValley/Saves:rw
+      - ./src:/home/app/src
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "24642:24642/udp"
+      - "24642:24642/tcp"
+    restart: unless-stopped
+    entrypoint: ["/home/app/startup.sh"]
