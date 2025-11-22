@@ -1,0 +1,5 @@
+<Project>
+   <PropertyGroup>
+      <GamePath>/home/app/games/game</GamePath>
+   </PropertyGroup>
+</Project>

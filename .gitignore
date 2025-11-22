@@ -4,3 +4,7 @@ mods/**
 !mods/PUT_YOUR_MODS_HERE.txt
 saves/**
 !saves/PUT_YOUR_SAVES_HERE.txt
+
+# Build results
+[Bb]in/
+[Oo]bj/

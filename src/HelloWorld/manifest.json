@@ -1,0 +1,11 @@
+{
+  "Name": "HelloWorld",
+  "Author": "IcyAvocado",
+  "Version": "1.0.0",
+  "Description": "HelloWorld",
+  "UniqueID": "icyavocado.helloworld",
+  "EntryDll": "HelloWorld.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}
+

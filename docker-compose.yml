@@ -3,9 +3,9 @@ services:
     build: .
     container_name: 'stardev_valley'
     volumes:
-      - ./install_directory:/home/app/games:ro
-      - ./mods:/home/app/games/game/Mods:ro
-      - ./saves:/home/app/.config/StardewValley/Saves:rw
+      - ./install_directory:/home/app/games
+      - ./mods:/home/app/games/game/Mods
+      - ./saves:/home/app/.config/StardewValley/Saves
       - ./src:/home/app/src
     ports:
       - "8080:8080"
