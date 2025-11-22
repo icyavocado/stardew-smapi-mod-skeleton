@@ -29,3 +29,5 @@ dotnet build src/HelloWorld/HelloWorld.csproj
 cd /home/app
 supervisorctl restart stardewvalley
 ```
+
+4. View game in browser `http://localhost:8080`
