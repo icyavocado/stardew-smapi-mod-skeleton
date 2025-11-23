@@ -67,39 +67,41 @@ namespace Always_On_Server
 
         private bool winterFeastAvailable;
         private int winterFeastCountDown;
-        //variables for current time and date
-        int currentTime = Game1.timeOfDay;
-        SDate currentDate = SDate.Now();
-        SDate eggFestival = new SDate(13, "spring");
-        SDate dayAfterEggFestival = new SDate(14, "spring");
-        SDate flowerDance = new SDate(24, "spring");
-        SDate luau = new SDate(11, "summer");
-        SDate danceOfJellies = new SDate(28, "summer");
-        SDate stardewValleyFair = new SDate(16, "fall");
-        SDate spiritsEve = new SDate(27, "fall");
-        SDate festivalOfIce = new SDate(8, "winter");
-        SDate feastOfWinterStar = new SDate(25, "winter");
-        SDate grampasGhost = new SDate(1, "spring", 3);
-        ///////////////////////////////////////////////////////
-
-
-
-
 
         //variables for timeout reset code
-
         private int timeOutTicksForReset;
         private int festivalTicksForReset;
         private int shippingMenuTimeoutTicks;
 
+        //variables for current time and date
+        int currentTime = Game1.timeOfDay;
+        SDate today = SDate.now();
+        Dictionary<string, SDate> importantDates = new Dictionary<string, SDate>
+        {
+            { "eggFestival", new SDate(13, "spring") },
+            { "flowerDance", new SDate(24, "spring") },
+            { "luau", new SDate(11, "summer") },
+            { "danceOfMoonlightJellies", new SDate(28, "summer") },
+            { "stardewValleyFair, new SDate(16, "fall") },
+            { "spiritsEve", new SDate(27, "fall" ) },
+            { "festivalOfIce", new SDate(8, "winter") },
+            { "feastOfWinterStar", new SDate(8, "winter") },
+            { "ghostOfGrandpa", new SDate(1, "spring", 3) }
+        };
+
+        Dictionary<string, int skillNumber> skills = new Dictionary<string, int>
+        {
+            { "Farming", Farmer.getSkillNumberFromName("farming") },
+            { "Mining", Farmer.getSkillNumberFromName("mining")},
+            { "Foraging", Farmer.getSkillNumberFromName("foraging") },
+            { "Fishing", Farmer.getSkillNumberFromName("fishing") },
+            { "Combat", Farmer.getSkillNumberFromName("combat") }
+        };
 
         SDate currentDateForReset = SDate.Now();
         SDate danceOfJelliesForReset = new SDate(28, "summer");
         SDate spiritsEveForReset = new SDate(27, "fall");
         //////////////////////////
-
-
-
 
         public override void Entry(IModHelper helper)
         {
@@ -119,9 +121,84 @@ namespace Always_On_Server
             helper.Events.Specialized.UnvalidatedUpdateTicked += OnUnvalidatedUpdateTick; //used bc only thing that gets throug save window
         }
 
+        private void RestoreLandE(object data) {
+            foreach (KeyValuePair<string, int> skill in skills)
+            {
+                Game1.player[skill.Value.skillNumber] = data[$"{skill.key}Level"];
+                Game1.player.experiencePoints[skill.Value.skillNumber] = data[$"{skill.key}Experience"];
+            }
+        }
 
+        private void BackUpLandE(object data) {
+            foreach (KeyValuePair<string, int> skill in skills)
+            {
+                data[$"{skill.key}Level"] = Game1.player[skill.Value.skillNumber];
+                data[$"{skill.key}Experience"] = Game1.player.experiencePoints[skill.Value.skillNumber];
+            }
+        }
 
+        private void LoadLandE(object saveContent) {
+            // Load save conten
+            if (!saveContent) {
+                string saveDirectory = $"data/{Constants.SaveFolderName}.json";
+                try
+                {
+                    saveContent = this.Helper.Data.ReadJsonFile<ModData>(saveDirectory);
+                }
+                catch (Exception ex)
+                {
+                    Game1.chatBox.addInfoMessage($"Failed to load data. Abort. Error: {ex.Message}");
+                }
+            }
 
+            if (!saveContent) {
+                Game1.chatBox.addInfoMessage($"Failed to load save data. Abort. Save Directory: {saveDirectory}");
+                return;
+            };
+
+            this.RestoreLandE(saveContent);
+        }
+
+        private void SaveLandE(object saveContent) {
+            string saveDirectory;
+
+            if (!saveContent) {
+                // Load save content
+                saveDirectory = $"data/{Constants.SaveFolderName}.json";
+                try {
+                    saveContent = this.Helper.Data.ReadJsonFile<ModData>(saveDirectory);
+                }
+                catch (Exception ex)
+                {
+                    Game1.chatBox.addInfoMessage($"Failed to load data. Abort. Error: {ex.Message}");
+                }
+            }
+
+            if (!saveContent) {
+                Game1.chatBox.addInfoMessage($"Failed to load save data. Abort. Save Directory: {saveDirectory}");
+                return;
+            };
+
+            this.BackUpLandE(saveContent);
+
+            try
+            {
+                this.Helper.Data.WriteJsonFile<ModData>(saveDirectory);
+            }
+            catch (Exception ex)
+            {
+                Game1.chatBox.addInfoMessage($"Failed to save data. Abort. Error: {ex.Message}");
+            }
+        }
+
+        private void SetLandEToMax() {
+            foreach (KeyValuePair<string, int> skill in skills)
+            {
+                Game1.player[skill.Value.skillNumber] = 10;
+                // Set experiencePoints to 0 to prevent leveling up at the end of the day
+                Game1.player.experiencePoints[skill.Value.skillNumber] = 0;
+            }
+        }
 
 
         /// <summary>Raised after the player loads a save slot and the world is initialised.</summary>
@@ -129,44 +206,14 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
         {
-            // turns on server after the game loads
-            if (Game1.IsServer)
-            {
-                // store levels, set in game levels to max
-                var data = this.Helper.Data.ReadJsonFile<ModData>($"data/{Constants.SaveFolderName}.json") ?? new ModData();
+            if (!Game1.IsServer) return;
 
-                // Skill numbers
-                int FarmingSkillNumber = Farmer.getSkillNumberFromName("farming");
-                int MiningSkillNumber = Farmer.getSkillNumberFromName("mining");
-                int ForagingSkillNumber = Farmer.getSkillNumberFromName("foraging");
-                int FishingSkillNumber = Farmer.getSkillNumberFromName("fishing");
-                int CombatSkillNumber = Farmer.getSkillNumberFromName("combat");
+            this.SetLandEToMax();
 
-                // Levels
-                data.FarmingLevel = Game1.player.FarmingLevel;
-                data.MiningLevel = Game1.player.MiningLevel;
-                data.ForagingLevel = Game1.player.ForagingLevel;
-                data.FishingLevel = Game1.player.FishingLevel;
-                data.CombatLevel = Game1.player.CombatLevel;
+            IsEnabled = true;
 
-                //Experience
-                data.FarmingExperience = Game1.player.experiencePoints[FarmingSkillNumber];
-                data.MiningExperience = Game1.player.experiencePoints[MiningSkillNumber];
-                data.ForagingExperience = Game1.player.experiencePoints[ForagingSkillNumber];
-                data.FishingExperience = Game1.player.experiencePoints[FishingSkillNumber];
-                data.CombatExperience = Game1.player.experiencePoints[CombatSkillNumber];
-
-                this.Helper.Data.WriteJsonFile($"data/{Constants.SaveFolderName}.json", data);
-                Game1.player.setSkillLevel("Farming", 10);
-                Game1.player.setSkillLevel("Mining", 10);
-                Game1.player.setSkillLevel("Foraging", 10);
-                Game1.player.setSkillLevel("Fishing", 10);
-                Game1.player.setSkillLevel("Combat", 10);
-                ////////////////////////////////////////
-                IsEnabled = true;
-                Game1.chatBox.addInfoMessage("The Host is in Server Mode!");
-                this.Monitor.Log("Server Mode On!", LogLevel.Info);
-            }
+            Game1.chatBox.addInfoMessage("The Host is in Server Mode!");
+            this.Monitor.Log("Server Mode On!", LogLevel.Info);
 
         }
 
@@ -226,261 +273,128 @@ namespace Always_On_Server
         }
 
 
+        private void EnableSever()
+        {
+            Helper.ReadConfig<ModConfig>();
+            IsEnabled = true;
+
+            this.Monitor.Log("Server Mode On!", LogLevel.Info);
+            Game1.chatBox.addInfoMessage("The Host is in Server Mode!");
+
+            Game1.displayHUD = true;
+            Game1.addHUDMessage(new HUDMessage("Server Mode On!"));
+
+            Game1.options.pauseWhenOutOfFocus = false;
+
+            this.SaveLandE();
+            this.SetLandEToMax();
+
+            Game1.addHUDMessage(new HUDMessage("Server Mode COMPLETE!"));
+        }
+
+        private void DisableServer()
+        {
+            IsEnabled = false;
+            this.Monitor.Log("The server off!", LogLevel.Info);
+
+            Game1.chatBox.addInfoMessage("The Host has returned!");
+
+            Game1.displayHUD = true;
+
+            this.LoadLandE();
+
+            Game1.addHUDMessage(new HUDMessage("Server Mode Off!"));
+        }
+
         // toggles server on/off with console command "server"
-        private void ServerToggle(string command, string[] args)
+        private void ServerToggle()
         {
-            if (Context.IsWorldReady)
-            {
-                if (!IsEnabled)
-                {
-                    Helper.ReadConfig<ModConfig>();
-                    IsEnabled = true;
+            if (!Context.IsWorldReady) return;
+            this[IsEnabled ? "DisableServer" : "EnableSever"]();
+        }
+    }
 
 
-                    this.Monitor.Log("Server Mode On!", LogLevel.Info);
-                    Game1.chatBox.addInfoMessage("The Host is in Server Mode!");
+    private void ResetPlayerLocation() {
+        // warp farmer on button press
+        if (Game1.player.currentLocation is FarmHouse)
+        {
+            Game1.warpFarmer("Farm", 64, 15, false);
+        }
+        else
+        {
+            this.GetBedCoordinates();
+            Game1.warpFarmer("Farmhouse", bedX, bedY, false);
+        }
+    }
+    /// <summary>Raised after the player presses a button on the keyboard, controller, or mouse.</summary>
+    /// <param name="sender">The event sender.</param>
+    /// <param name="e">The event data.</param>
+    private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
+    {
+        if (!Context.IsWorldReady || e.Button != this.Config.serverHotKey) return;
+        //toggles server on/off with configurable hotkey
+        this.ServerToggle();
 
-                    Game1.displayHUD = true;
-                    Game1.addHUDMessage(new HUDMessage("Server Mode On!"));
-
-                    Game1.options.pauseWhenOutOfFocus = false;
+        this.ResetPlayerLocation();
+    }
 
 
-                    // store levels, set in game levels to max
-                    var data = this.Helper.Data.ReadJsonFile<ModData>($"data/{Constants.SaveFolderName}.json") ?? new ModData();
+    // private void FestivalsToggle()
+    // {
+    //     if (!this.Config.festivalsOn)
+    //         return;
+    // }
+    //
 
-                    // Skill numbers
-                    int FarmingSkillNumber = Farmer.getSkillNumberFromName("farming");
-                    int MiningSkillNumber = Farmer.getSkillNumberFromName("mining");
-                    int ForagingSkillNumber = Farmer.getSkillNumberFromName("foraging");
-                    int FishingSkillNumber = Farmer.getSkillNumberFromName("fishing");
-                    int CombatSkillNumber = Farmer.getSkillNumberFromName("combat");
-
-                    // Levels
-                    data.FarmingLevel = Game1.player.FarmingLevel;
-                    data.MiningLevel = Game1.player.MiningLevel;
-                    data.ForagingLevel = Game1.player.ForagingLevel;
-                    data.FishingLevel = Game1.player.FishingLevel;
-                    data.CombatLevel = Game1.player.CombatLevel;
-
-                    //Experience
-                    data.FarmingExperience = Game1.player.experiencePoints[FarmingSkillNumber];
-                    data.MiningExperience = Game1.player.experiencePoints[MiningSkillNumber];
-                    data.ForagingExperience = Game1.player.experiencePoints[ForagingSkillNumber];
-                    data.FishingExperience = Game1.player.experiencePoints[FishingSkillNumber];
-                    data.CombatExperience = Game1.player.experiencePoints[CombatSkillNumber];
-
-                    this.Helper.Data.WriteJsonFile($"data/{Constants.SaveFolderName}.json", data);
-                    Game1.player.setSkillLevel("Farming", 10);
-                    Game1.player.setSkillLevel("Mining", 10);
-                    Game1.player.setSkillLevel("Foraging", 10);
-                    Game1.player.setSkillLevel("Fishing", 10);
-                    Game1.player.setSkillLevel("Combat", 10);
-                    ///////////////////////////////////////////
-                    Game1.addHUDMessage(new HUDMessage("Server Mode COMPLETE!"));
-                    ///////////////////////////////////////////
-
-                }
-                else
-                {
-                    IsEnabled = false;
-                    this.Monitor.Log("The server off!", LogLevel.Info);
-
-                    Game1.chatBox.addInfoMessage("The Host has returned!");
-
-                    Game1.displayHUD = true;
-                    Game1.addHUDMessage(new HUDMessage("Server Mode Off!"));
-
-                    //set player levels to stored levels
-
-                    // Skill numbers
-                    int FarmingSkillNumber = Farmer.getSkillNumberFromName("farming");
-                    int MiningSkillNumber = Farmer.getSkillNumberFromName("mining");
-                    int ForagingSkillNumber = Farmer.getSkillNumberFromName("foraging");
-                    int FishingSkillNumber = Farmer.getSkillNumberFromName("fishing");
-                    int CombatSkillNumber = Farmer.getSkillNumberFromName("combat");
-
-                    var data = this.Helper.Data.ReadJsonFile<ModData>($"data/{Constants.SaveFolderName}.json") ?? new ModData();
-
-                    // Set levels
-                    Game1.player.farmingLevel.Value = data.FarmingLevel;
-                    Game1.player.miningLevel.Value = data.MiningLevel;
-                    Game1.player.foragingLevel.Value = data.ForagingLevel;
-                    Game1.player.fishingLevel.Value = data.FishingLevel;
-                    Game1.player.combatLevel.Value = data.CombatLevel;
-
-                    // Set EXP
-                    Game1.player.experiencePoints[FarmingSkillNumber] = data.FarmingExperience;
-                    Game1.player.experiencePoints[MiningSkillNumber] = data.MiningExperience;
-                    Game1.player.experiencePoints[ForagingSkillNumber] = data.ForagingExperience;
-                    Game1.player.experiencePoints[FishingSkillNumber] = data.FishingExperience;
-                    Game1.player.experiencePoints[CombatSkillNumber] = data.CombatExperience;
-                    //////////////////////////////////////
-                }
-            }
+    /// <summary>Raised once per second after the game state is updated.</summary>
+    /// <param name="sender">The event sender.</param>
+    /// <param name="e">The event data.</param>
+    private void OnOneSecondUpdateTicked(object sender, OneSecondUpdateTickedEventArgs e)
+    {
+        if (!IsEnabled) // server toggle
+        {
+            Game1.netWorldState.Value.IsPaused = false;
+            return;
         }
 
-        /// <summary>Raised after the player presses a button on the keyboard, controller, or mouse.</summary>
-        /// <param name="sender">The event sender.</param>
-        /// <param name="e">The event data.</param>
-        private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
+        NoClientsPause();
+
+        if (this.Config.clientsCanPause)
         {
-            //toggles server on/off with configurable hotkey
-            if (Context.IsWorldReady)
+            List<ChatMessage> messages = this.Helper.Reflection.GetField<List<ChatMessage>>(Game1.chatBox, "messages").GetValue();
+            if (messages.Count > 0)
             {
-                if (e.Button == this.Config.serverHotKey)
+                var messagetoconvert = messages[messages.Count - 1].message;
+                string actualmessage = ChatMessage.makeMessagePlaintext(messagetoconvert, true);
+                string lastFragment = actualmessage.Split(' ').Length >= 2 ? actualmessage.Split(' ')[1] : null;
+
+                if (lastFragment != null && lastFragment == "!pause")
                 {
-                    if (!IsEnabled)
-                    {
-                        Helper.ReadConfig<ModConfig>();
-                        IsEnabled = true;
-                        this.Monitor.Log("The server is on!", LogLevel.Info);
-                        Game1.chatBox.addInfoMessage("The Host is in Server Mode!");
-
-                        Game1.displayHUD = true;
-                        Game1.addHUDMessage(new HUDMessage("Server Mode On!"));
-
-                        Game1.options.pauseWhenOutOfFocus = false;
-                        // store levels, set in game levels to max
-                        var data = this.Helper.Data.ReadJsonFile<ModData>($"data/{Constants.SaveFolderName}.json") ?? new ModData();
-
-                        // Skill numbers
-                        int FarmingSkillNumber = Farmer.getSkillNumberFromName("farming");
-                        int MiningSkillNumber = Farmer.getSkillNumberFromName("mining");
-                        int ForagingSkillNumber = Farmer.getSkillNumberFromName("foraging");
-                        int FishingSkillNumber = Farmer.getSkillNumberFromName("fishing");
-                        int CombatSkillNumber = Farmer.getSkillNumberFromName("combat");
-
-                        // Levels
-                        data.FarmingLevel = Game1.player.FarmingLevel;
-                        data.MiningLevel = Game1.player.MiningLevel;
-                        data.ForagingLevel = Game1.player.ForagingLevel;
-                        data.FishingLevel = Game1.player.FishingLevel;
-                        data.CombatLevel = Game1.player.CombatLevel;
-
-                        //Experience
-                        data.FarmingExperience = Game1.player.experiencePoints[FarmingSkillNumber];
-                        data.MiningExperience = Game1.player.experiencePoints[MiningSkillNumber];
-                        data.ForagingExperience = Game1.player.experiencePoints[ForagingSkillNumber];
-                        data.FishingExperience = Game1.player.experiencePoints[FishingSkillNumber];
-                        data.CombatExperience = Game1.player.experiencePoints[CombatSkillNumber];
-
-                        this.Helper.Data.WriteJsonFile($"data/{Constants.SaveFolderName}.json", data);
-                        Game1.player.setSkillLevel("Farming", 10);
-                        Game1.player.setSkillLevel("Mining", 10);
-                        Game1.player.setSkillLevel("Foraging", 10);
-                        Game1.player.setSkillLevel("Fishing", 10);
-                        Game1.player.setSkillLevel("Combat", 10);
-                        ///////////////////////////////////////////
-                        Game1.addHUDMessage(new HUDMessage("Server Mode COMPLETE!"));
-                    }
-                    else
-                    {
-                        IsEnabled = false;
-                        this.Monitor.Log("The server is off!", LogLevel.Info);
-
-                        Game1.chatBox.addInfoMessage("The Host has returned!");
-
-                        Game1.displayHUD = true;
-                        Game1.addHUDMessage(new HUDMessage("Server Mode Off!"));
-
-                        //set player levels to stored levels
-                        
-                        // Skill numbers
-                        int FarmingSkillNumber = Farmer.getSkillNumberFromName("farming");
-                        int MiningSkillNumber = Farmer.getSkillNumberFromName("mining");
-                        int ForagingSkillNumber = Farmer.getSkillNumberFromName("foraging");
-                        int FishingSkillNumber = Farmer.getSkillNumberFromName("fishing");
-                        int CombatSkillNumber = Farmer.getSkillNumberFromName("combat");
-
-                        var data = this.Helper.Data.ReadJsonFile<ModData>($"data/{Constants.SaveFolderName}.json") ?? new ModData();
-
-                        // Set levels
-                        Game1.player.farmingLevel.Value = data.FarmingLevel;
-                        Game1.player.miningLevel.Value = data.MiningLevel;
-                        Game1.player.foragingLevel.Value = data.ForagingLevel;
-                        Game1.player.fishingLevel.Value = data.FishingLevel;
-                        Game1.player.combatLevel.Value = data.CombatLevel;
-
-                        // Set EXP
-                        Game1.player.experiencePoints[FarmingSkillNumber] = data.FarmingExperience;
-                        Game1.player.experiencePoints[MiningSkillNumber] = data.MiningExperience;
-                        Game1.player.experiencePoints[ForagingSkillNumber] = data.ForagingExperience;
-                        Game1.player.experiencePoints[FishingSkillNumber] = data.FishingExperience;
-                        Game1.player.experiencePoints[CombatSkillNumber] = data.CombatExperience;
-                        //////////////////////////////////////
-
-                    }
-                    //warp farmer on button press
-                    if (Game1.player.currentLocation is FarmHouse)
-                    {
-                        Game1.warpFarmer("Farm", 64, 15, false);
-                    }
-                    else
-                    {
-                        getBedCoordinates();
-                        Game1.warpFarmer("Farmhouse", bedX, bedY, false);
-                    }
+                    Game1.netWorldState.Value.IsPaused = true;
+                    clientPaused = true;
+                    this.SendChatMessage("Game Paused");
+                }
+                if (lastFragment != null && lastFragment == "!unpause")
+                {
+                    Game1.netWorldState.Value.IsPaused = false;
+                    clientPaused = false;
+                    this.SendChatMessage("Game UnPaused");
                 }
             }
         }
 
 
-        private void FestivalsToggle()
+
+        //Invite Code Copier 
+        if (this.Config.copyInviteCodeToClipboard)
         {
-            if (!this.Config.festivalsOn)
-                return;
-        }
 
-
-        /// <summary>Raised once per second after the game state is updated.</summary>
-        /// <param name="sender">The event sender.</param>
-        /// <param name="e">The event data.</param>
-        private void OnOneSecondUpdateTicked(object sender, OneSecondUpdateTickedEventArgs e)
-        {
-            if (!IsEnabled) // server toggle
+            if (Game1.options.enableServer)
             {
-                Game1.netWorldState.Value.IsPaused = false;
-                return;
-            }
-
-            NoClientsPause();
-
-            if (this.Config.clientsCanPause)
-            {
-                List<ChatMessage> messages = this.Helper.Reflection.GetField<List<ChatMessage>>(Game1.chatBox, "messages").GetValue();
-                if (messages.Count > 0)
+                if (inviteCode != Game1.server.getInviteCode())
                 {
-                    var messagetoconvert = messages[messages.Count - 1].message;
-                    string actualmessage = ChatMessage.makeMessagePlaintext(messagetoconvert, true);
-                    string lastFragment = actualmessage.Split(' ').Length >= 2 ? actualmessage.Split(' ')[1] : null;
-
-                    if (lastFragment != null && lastFragment == "!pause")
-                    {
-                        Game1.netWorldState.Value.IsPaused = true;
-                        clientPaused = true;
-                        this.SendChatMessage("Game Paused");
-                    }
-                    if (lastFragment != null && lastFragment == "!unpause")
-                    {
-                        Game1.netWorldState.Value.IsPaused = false;
-                        clientPaused = false;
-                        this.SendChatMessage("Game UnPaused");
-                    }
-                }
-            }
-
-
-
-            //Invite Code Copier 
-            if (this.Config.copyInviteCodeToClipboard)
-            {
-
-                if (Game1.options.enableServer)
-                {
-                    if (inviteCode != Game1.server.getInviteCode())
-                    {
-                        DesktopClipboard.SetText($"Invite Code: {Game1.server.getInviteCode()}");
+                    DesktopClipboard.SetText($"Invite Code: {Game1.server.getInviteCode()}");
                         inviteCode = Game1.server.getInviteCode();
                     }
                 }
@@ -1064,7 +978,7 @@ namespace Always_On_Server
                             else
                             {
                                 this.SendChatMessage("Warping inside house.");
-                                getBedCoordinates();
+                                GetBedCoordinates();
                                 Game1.warpFarmer("Farmhouse", bedX, bedY, false);
                             }
                         }
@@ -1651,7 +1565,7 @@ namespace Always_On_Server
 
 
 
-        private void getBedCoordinates()
+        private void GetBedCoordinates()
         {
             int houseUpgradeLevel = Game1.player.HouseUpgradeLevel;
             if (houseUpgradeLevel == 0)
@@ -1673,7 +1587,7 @@ namespace Always_On_Server
 
         private void GoToBed()
         {
-            getBedCoordinates();
+            GetBedCoordinates();
 
             Game1.warpFarmer("Farmhouse", bedX, bedY, false);
 
@@ -1769,7 +1683,7 @@ namespace Always_On_Server
             Game1.netReady.SetLocalReady("festivalEnd", true);
             Game1.activeClickableMenu = new ReadyCheckDialog("festivalEnd", true, who =>
             {
-                getBedCoordinates();
+                GetBedCoordinates();
                 Game1.exitActiveMenu();
                 Game1.warpFarmer("Farmhouse", bedX, bedY, false);
                 Game1.timeOfDay = currentDate == spiritsEve ? 2400 : 2200;
