@@ -945,6 +945,11 @@ namespace Always_On_Server
                                 this.SendChatMessage($"Try after {this.Config.timeOfDayToSleep}.");
                             }
                         }
+                        if (lastFragment == "!sleep_now")
+                        {
+                            GoToBed();
+                            this.SendChatMessage("Going to bed.")
+                        }
                         if (lastFragment == "!festival")
                         {
                             this.SendChatMessage("Trying to go to Festival.");
