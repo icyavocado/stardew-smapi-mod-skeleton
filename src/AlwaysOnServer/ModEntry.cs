@@ -729,7 +729,7 @@ namespace Always_On_Server
         private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
         {
 
-            this.Debug("OnUpdateTicked - start", IsEnabled, e?.IsMultipleOf?.ToString());
+            this.Debug("OnUpdateTicked - start", IsEnabled, e?.GetType().Name);
 
             if (!IsEnabled) { this.Debug("OnUpdateTicked - not enabled"); return; }
 
