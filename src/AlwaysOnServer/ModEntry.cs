@@ -160,9 +160,6 @@ namespace Always_On_Server
             helper.ConsoleCommands.Add("server", "Toggles headless server on/off", this.ServerToggle);
             helper.ConsoleCommands.Add("debug_server", "Turns debug mode on/off, lets server run when no players are connected", this.DebugToggle);
 
-            helper.ConsoleCommands.Add("test", "Hi", this.Test);
-            helper.ConsoleCommands.Add("call", "Hi", this.Call);
-
             helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
             helper.Events.GameLoop.Saving += this.OnSaving; // Shipping Menu handler
             helper.Events.GameLoop.OneSecondUpdateTicked += this.OnOneSecondUpdateTicked; //game tick event handler
@@ -362,7 +359,6 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnRendered(object sender, RenderedEventArgs e)
         {
-            this.Debug("OnRendered - start", sender?.GetType().Name, e?.GetType().Name);
             //draw a textbox in the top left corner saying Server On
             if (Game1.options.enableServer && IsEnabled && Game1.server != null)
             {
@@ -606,7 +602,6 @@ namespace Always_On_Server
         }
 
         private void ProcessCommand() {
-            this.Debug("ProcessCommand - start", IsEnabled, Context.IsWorldReady);
             if (!Context.IsWorldReady) return;
 
             List<ChatMessage> messages = this.Helper.Reflection.GetField<List<ChatMessage>>(Game1.chatBox, "messages").GetValue();
@@ -741,7 +736,6 @@ namespace Always_On_Server
 
         private void LockPlayerChests()
         {
-            this.Debug("LockPlayerChests - start");
             foreach (Farmer farmer in Game1.getOnlineFarmers())
             {
                 if (farmer.currentLocation is Cabin cabin && farmer != cabin.owner)
@@ -759,7 +753,6 @@ namespace Always_On_Server
                     cabin.fridge.Value.mutex.RequestLock();
                 }
             }
-            this.Debug("LockPlayerChests - end");
         }
 
         /// <summary>Raised after the game state is updated (≈60 times per second).</summary>
@@ -1052,7 +1045,6 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnUnvalidatedUpdateTick(object sender, UnvalidatedUpdateTickedEventArgs e)
         {
-            this.Debug("OnUnvalidatedUpdateTick - start", Game1.timeOfDay);
             //resets server connection after certain amount of time end of day
             if (Game1.timeOfDay >= this.Config.timeOfDayToSleep || (Game1.timeOfDay == 600 && currentDateForReset != danceOfJelliesForReset && currentDateForReset != spiritsEveForReset && this.Config.endofdayTimeOut != 0))
             {
