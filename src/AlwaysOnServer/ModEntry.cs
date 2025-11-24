@@ -101,8 +101,18 @@ namespace Always_On_Server
             try
             {
                 var parts = variables?.Select(v => v == null ? "null" : JsonConvert.SerializeObject(v)) ?? Enumerable.Empty<string>();
-                string msg = where + " | " + string.Join(", ", parts);
+                string msg = DateTime.UtcNow.ToString("s") + " | " + where + " | " + string.Join(", ", parts);
+                // log to SMAPI console
                 this.Monitor.Log(msg, LogLevel.Debug);
+
+                // also append to local log file
+                try
+                {
+                    var dir = Path.GetDirectoryName(LogPath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.AppendAllText(LogPath, msg + Environment.NewLine);
+                }
+                catch (Exception) { /* don't let file IO break debug logging */ }
             }
             catch (Exception ex)
             {
@@ -729,9 +739,8 @@ namespace Always_On_Server
         private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
         {
 
-            this.Debug("OnUpdateTicked - start", IsEnabled, e?.GetType().Name);
-
-            if (!IsEnabled) { this.Debug("OnUpdateTicked - not enabled"); return; }
+            // High-frequency update (≈60Hz). Avoid debug logging here to prevent spam.
+            if (!IsEnabled) return;
 
             //lockPlayerChests
             if (this.Config.lockPlayerChests) this.LockPlayerChests();
@@ -778,7 +787,6 @@ namespace Always_On_Server
 
             // just turns off server mod if the game gets exited back to title screen
             if (Game1.activeClickableMenu is TitleMenu) IsEnabled = false;
-            this.Debug("OnUpdateTicked - end");
         }
 
         private void FestivalNotification()
