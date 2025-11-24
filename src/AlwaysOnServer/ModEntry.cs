@@ -94,8 +94,26 @@ namespace Always_On_Server
         SDate spiritsEveForReset = new SDate(27, "fall");
         //////////////////////////
 
+        // Debug helper: logs variables when `debug` is true
+        private void Debug(string where, params object[] variables)
+        {
+            if (!this.debug) return;
+            try
+            {
+                var parts = variables?.Select(v => v == null ? "null" : JsonConvert.SerializeObject(v)) ?? Enumerable.Empty<string>();
+                string msg = where + " | " + string.Join(", ", parts);
+                this.Monitor.Log(msg, LogLevel.Debug);
+            }
+            catch (Exception ex)
+            {
+                try { this.Monitor.Log(where + " | (debug serialization error: " + ex.Message + ")", LogLevel.Debug); } catch { }
+            }
+        }
+
         public override void Entry(IModHelper helper)
         {
+
+            this.Debug("Entry - start", helper?.GetType().Name, this.Config);
 
             this.Config = this.Helper.ReadConfig<ModConfig>();
 
@@ -113,9 +131,11 @@ namespace Always_On_Server
             helper.Events.Input.ButtonPressed += this.OnButtonPressed;
             helper.Events.Display.Rendered += this.OnRendered;
             helper.Events.Specialized.UnvalidatedUpdateTicked += OnUnvalidatedUpdateTick; //used bc only thing that gets throug save window
+            this.Debug("Entry - events registered");
         }
 
         private void RestoreLandE(ModData saveContent) {
+            this.Debug("RestoreLandE - start", saveContent);
             F.Dump("Hi");
             foreach (KeyValuePair<string, int> skill in skills)
             {
@@ -125,6 +145,7 @@ namespace Always_On_Server
         }
 
         private void BackUpLandE(ModData saveContent) {
+            this.Debug("BackUpLandE - start", saveContent);
             F.Dump(saveContent);
             foreach (KeyValuePair<string, int> skill in skills)
             {
@@ -134,11 +155,14 @@ namespace Always_On_Server
             }
         }
 
-        private void LoadLandE(ModData? saveContent = null) {
+        private void LoadLandE(ModData? saveContent = null)
+        {
+            this.Debug("LoadLandE - start", saveContent);
             saveDirectory = $"{Constants.SaveFolderName}.json";
 
-            // Load save conten
-            if (saveContent != null) {
+            // Load save content if none provided
+            if (saveContent == null)
+            {
                 try
                 {
                     saveContent = this.Helper.Data.ReadJsonFile<ModData>(saveDirectory);
@@ -149,28 +173,35 @@ namespace Always_On_Server
                 }
             }
 
-            if (saveContent != null) {
+            if (saveContent == null)
+            {
+                this.Debug("LoadLandE - failed to load saveContent", saveContent, saveDirectory);
                 Game1.chatBox.addInfoMessage("Failed to load save data. Abort.");
                 return;
-            };
+            }
 
+            this.Debug("LoadLandE - calling RestoreLandE", saveContent);
             this.RestoreLandE(saveContent);
         }
 
         private void Test(string command, string[] args)
         {
+            this.Debug("Test - start", command, args);
             if (Context.IsWorldReady)
             {
                 this.debug = !debug;
                 this.Monitor.Log($"Server Debug {(debug ? "On" : "Off")}", LogLevel.Info);
+                this.Debug("Test - toggled debug", this.debug);
             }
         }
 
         private void Call(string command, string[] args)
         {
+            this.Debug("Call - start", command, args);
             if (Context.IsWorldReady)
             {
                 this.Log(command);
+                this.Debug("Call - invoking CallByName", command);
                 this.CallByName(command);
             }
         }
@@ -181,13 +212,16 @@ namespace Always_On_Server
             this.Monitor.Log(text, LogLevel.Info);
         }
 
-        private void SaveLandE(ModData? saveContent = null) {
+        private void SaveLandE(ModData? saveContent = null)
+        {
             saveDirectory = $"{Constants.SaveFolderName}.json";
             this.Log(Constants.SaveFolderName);
 
-            if (saveContent != null) {
-                // Load save content
-                try {
+            // Load existing container if none was provided
+            if (saveContent == null)
+            {
+                try
+                {
                     saveContent = this.Helper.Data.ReadJsonFile<ModData>(saveDirectory) ?? new ModData();
                 }
                 catch (Exception ex)
@@ -196,10 +230,11 @@ namespace Always_On_Server
                 }
             }
 
-            if (saveContent != null) {
+            if (saveContent == null)
+            {
                 Game1.chatBox.addInfoMessage("Failed to load save data. Abort.");
                 return;
-            };
+            }
 
             this.BackUpLandE(saveContent);
 
@@ -214,12 +249,14 @@ namespace Always_On_Server
         }
 
         private void SetLandEToMax() {
+            this.Debug("SetLandEToMax - start");
             foreach (KeyValuePair<string, int> skill in skills)
             {
                 Game1.player.setSkillLevel(skill.Key, 10);
                 // Set experiencePoints to 1 to prevent leveling up at the end of the day
                 Game1.player.experiencePoints[skill.Value] = 1;
             }
+            this.Debug("SetLandEToMax - finished");
         }
 
 
@@ -228,6 +265,7 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
         {
+            this.Debug("OnSaveLoaded - start", sender?.GetType().Name, e?.GetType().Name);
             if (!Game1.IsServer) return;
 
             this.SetLandEToMax();
@@ -237,15 +275,23 @@ namespace Always_On_Server
             Game1.chatBox.addInfoMessage("The Host is in Server Mode!");
             this.Monitor.Log("Server Mode On!", LogLevel.Info);
 
+            // Ensure one-off event dictionary keys are initialized to safe defaults
+            if (!oneOffEvent.ContainsKey("SewersUnlock")) oneOffEvent["SewersUnlock"] = Game1.player.hasRustyKey;
+            if (!oneOffEvent.ContainsKey("CommunityCenterRun")) oneOffEvent["CommunityCenterRun"] = Game1.player.eventsSeen.Contains("191393");
+            if (!oneOffEvent.ContainsKey("JojaMemberRun")) oneOffEvent["JojaMemberRun"] = Game1.player.eventsSeen.Contains("502261");
+            if (!oneOffEvent.ContainsKey("FishingRod")) oneOffEvent["FishingRod"] = Game1.player.eventsSeen.Contains("739330");
+            this.Debug("OnSaveLoaded - initialized oneOffEvent", oneOffEvent);
         }
 
         //debug for running with no one online
         private void DebugToggle(string command, string[] args)
         {
+            this.Debug("DebugToggle - start", command, args);
             if (Context.IsWorldReady)
             {
                 this.debug = !debug;
                 this.Monitor.Log($"Server Debug {(debug ? "On" : "Off")}", LogLevel.Info);
+                this.Debug("DebugToggle - toggled debug", this.debug);
             }
         }
 
@@ -277,6 +323,7 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnRendered(object sender, RenderedEventArgs e)
         {
+            this.Debug("OnRendered - start", sender?.GetType().Name, e?.GetType().Name);
             //draw a textbox in the top left corner saying Server On
             if (Game1.options.enableServer && IsEnabled && Game1.server != null)
             {
@@ -289,14 +336,16 @@ namespace Always_On_Server
                 if (Game1.server.getInviteCode() != null)
                 {
                     string inviteCode = Game1.server.getInviteCode();
+                    this.Debug("OnRendered - invite code", inviteCode);
                     DrawTextBox(5, 420, Game1.dialogueFont, $"Invite Code: {inviteCode}");
                 }
             }
         }
 
 
-        public void EnableSever()
+        public void EnableServer()
         {
+            this.Debug("EnableServer - start");
             Helper.ReadConfig<ModConfig>();
             IsEnabled = true;
 
@@ -312,10 +361,12 @@ namespace Always_On_Server
             this.SetLandEToMax();
 
             Game1.addHUDMessage(new HUDMessage("Server Mode COMPLETE!"));
+            this.Debug("EnableServer - complete", IsEnabled);
         }
 
         public void DisableServer()
         {
+            this.Debug("DisableServer - start");
             IsEnabled = false;
             this.Monitor.Log("The server off!", LogLevel.Info);
 
@@ -326,26 +377,30 @@ namespace Always_On_Server
             this.LoadLandE();
 
             Game1.addHUDMessage(new HUDMessage("Server Mode Off!"));
+            this.Debug("DisableServer - complete", IsEnabled);
         }
 
         // toggles server on/off with console command "server"
         private void ServerToggle(string? command = "", string[]? args = null)
         {
             if (!Context.IsWorldReady) return;
-            this.CallByName(IsEnabled ? "DisableServer" : "EnableSever");
+            this.CallByName(IsEnabled ? "DisableServer" : "EnableServer");
         }
 
 
         private void ResetPlayerLocation() {
         // warp farmer on button press
+            this.Debug("ResetPlayerLocation - start", Game1.player?.currentLocation?.Name);
             if (Game1.player.currentLocation is FarmHouse)
             {
                 Game1.warpFarmer("Farm", 64, 15, false);
+                this.Debug("ResetPlayerLocation - warped to Farm");
             }
             else
             {
                 this.GetBedCoordinates();
                 Game1.warpFarmer("Farmhouse", bedX, bedY, false);
+                this.Debug("ResetPlayerLocation - warped to Farmhouse", bedX, bedY);
             }
         }
         /// <summary>Raised after the player presses a button on the keyboard, controller, or mouse.</summary>
@@ -381,15 +436,17 @@ namespace Always_On_Server
             {
                 string id = "logs_invite";
                 skipTicks[id] = skipTicks.ContainsKey(id) ? skipTicks[id] + 1 : 0;
-                if (skipTicks[id] >= 3) {
+                if (skipTicks[id] >= 3)
+                {
                     try
                     {
-                        if (logs != null) logs = new StreamWriter(LogPath, append: true);
-                        logs.WriteLine($"Invite Code: {Game1.server.getInviteCode()}\nPlayer Count: {Game1.server.connectionsCount}");
+                        using (var writer = new StreamWriter(LogPath, append: true))
+                        {
+                            writer.WriteLine($"Invite Code: {Game1.server.getInviteCode()}\nPlayer Count: {Game1.server.connectionsCount}");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        // Do nothing
                         this.SendChatMessage(ex.Message);
                     }
                     skipTicks[id] = 0;
@@ -428,13 +485,16 @@ namespace Always_On_Server
 
         private void FestivalLoop()
         {
-            var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
-            if (festivalInfo.Name != null) return;
+            this.Debug("FestivalLoop - start", currentDate.ToLocaleString(false), currentTime);
+            string key = currentDate.ToLocaleString(false);
+            if (!importantDates.TryGetValue(key, out var festivalInfo)) { this.Debug("FestivalLoop - no festival entry for key", key); return; }
+            if (string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("FestivalLoop - festival name empty"); return; }
 
             dynamic config = this.Config;
 
             int configCD = config[$"{festivalInfo.Name}CountDownConfig"];
-            if (eventCommandUsed) {
+            if (eventCommandUsed)
+            {
                 festivalInfo.CountDown = configCD;
                 eventCommandUsed = false;
                 this.CallByName($"{festivalInfo.Name}EventCmd");
@@ -445,8 +505,8 @@ namespace Always_On_Server
 
             if (festivalInfo.CountDown == 1)
             {
-                    this.SendChatMessage($"The {festivalInfo.Name} will begin in {notificationTime:0.#} minutes.");
-                    this.CallByName($"{festivalInfo.Name}EventCmd");
+                this.SendChatMessage($"The {festivalInfo.Name} will begin in {notificationTime:0.#} minutes.");
+                this.CallByName($"{festivalInfo.Name}EventCmd");
             }
             else if (festivalInfo.CountDown == configCD + 1)
             {
@@ -464,6 +524,10 @@ namespace Always_On_Server
             }
 
             if (festivalInfo.CountDown >= configTimeOut) this.LeaveFestival();
+
+            // save changes back to dictionary (tuples are value types)
+            importantDates[key] = festivalInfo;
+            this.Debug("FestivalLoop - end", festivalInfo);
         }
 
         private void eggFestivalAction()
@@ -503,6 +567,7 @@ namespace Always_On_Server
         }
 
         private void ProcessCommand() {
+            this.Debug("ProcessCommand - start", IsEnabled, Context.IsWorldReady);
             if (!IsEnabled || !Context.IsWorldReady) return;
 
             List<ChatMessage> messages = this.Helper.Reflection.GetField<List<ChatMessage>>(Game1.chatBox, "messages").GetValue();
@@ -511,9 +576,10 @@ namespace Always_On_Server
 
             var messagetoconvert = messages[messages.Count - 1].message;
             string actualmessage = ChatMessage.makeMessagePlaintext(messagetoconvert, true);
-            string lastFragment = actualmessage.Split(' ').Length >= 2 ? actualmessage.Split(' ')[1] : null;
+            string[] parts = actualmessage?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            string lastFragment = parts.Length >= 2 ? parts[1] : null;
 
-            if (lastFragment != null || lastFragment[0] != '!') return;
+            if (lastFragment == null || lastFragment.Length == 0 || lastFragment[0] != '!') return;
 
             switch (lastFragment)
             {
@@ -536,19 +602,22 @@ namespace Always_On_Server
                     }
                     break;
                 case "!event":
-                    if (Game1.CurrentEvent != null || !Game1.CurrentEvent.isFestival) {
+                    if (Game1.CurrentEvent == null || !Game1.CurrentEvent.isFestival)
+                    {
                         this.SendChatMessage("Not a festival or event. Abort.");
                         break;
                     }
 
                     festivalInfo = importantDates[currentDate.ToLocaleString(false)];
-                    if (festivalInfo.Name != "") {
+                    if (festivalInfo.Name != "")
+                    {
                         eventCommandUsed = true;
                         festivalInfo.Available = true;
                     }
                     break;
                 case "!leave":
-                    if (Game1.CurrentEvent != null || !Game1.CurrentEvent.isFestival) {
+                    if (Game1.CurrentEvent == null || !Game1.CurrentEvent.isFestival)
+                    {
                         this.SendChatMessage("Not a festival or event. Abort.");
                         break;
                     }
@@ -586,6 +655,7 @@ namespace Always_On_Server
                         DesktopClipboard.SetText(inviteCode);
                         outMsg += " added to your clipboard";
                     }
+                    this.Debug("ProcessCommand - invite", inviteCode, this.Config.copyInviteCodeToClipboard);
                     this.SendChatMessage($"{outMsg}.");
                     break;
                 default:
@@ -595,15 +665,18 @@ namespace Always_On_Server
         }
 
         private void GoToFestival() {
-            var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
-            if (!string.IsNullOrEmpty(festivalInfo.Name)) return;
-            if (currentTime >= festivalInfo.Start && currentTime <= festivalInfo.End) {
+            this.Debug("GoToFestival - start", currentDate.ToLocaleString(false), currentTime);
+            string key = currentDate.ToLocaleString(false);
+            if (!importantDates.TryGetValue(key, out var festivalInfo)) { this.Debug("GoToFestival - no festival entry", key); return; }
+            if (string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("GoToFestival - no festival today"); return; }
+            if (currentTime >= festivalInfo.Start && currentTime <= festivalInfo.End)
+            {
                 Game1.netReady.SetLocalReady("festivalStart", true);
                 Game1.activeClickableMenu = new ReadyCheckDialog("festivalStart", true, who =>
-                    {
-                        Game1.exitActiveMenu();
-                        if (!string.IsNullOrEmpty(festivalInfo.Location)) Game1.warpFarmer(festivalInfo.Location, 1, 20, 1);
-                    }
+                {
+                    Game1.exitActiveMenu();
+                    if (!string.IsNullOrEmpty(festivalInfo.Location)) Game1.warpFarmer(festivalInfo.Location, 1, 20, 1);
+                }
                 );
                 festivalInfo.Available = true;
             }
@@ -614,15 +687,22 @@ namespace Always_On_Server
                 festivalInfo.CountDown = 0;
                 this.GoToBed();
             }
+
+            importantDates[key] = festivalInfo;
+            this.Debug("GoToFestival - end", festivalInfo);
         }
 
         private bool IsClientConnected()
         {
-            return Game1.otherFarmers.Count >= 1;
+            this.Debug("IsClientConnected - start", Game1.otherFarmers?.Count);
+            bool connected = Game1.otherFarmers.Count >= 1;
+            this.Debug("IsClientConnected - result", connected);
+            return connected;
         }
 
         private void LockPlayerChests()
         {
+            this.Debug("LockPlayerChests - start");
             foreach (Farmer farmer in Game1.getOnlineFarmers())
             {
                 if (farmer.currentLocation is Cabin cabin && farmer != cabin.owner)
@@ -640,6 +720,7 @@ namespace Always_On_Server
                     cabin.fridge.Value.mutex.RequestLock();
                 }
             }
+            this.Debug("LockPlayerChests - end");
         }
 
         /// <summary>Raised after the game state is updated (≈60 times per second).</summary>
@@ -648,7 +729,9 @@ namespace Always_On_Server
         private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
         {
 
-            if (!IsEnabled) return;
+            this.Debug("OnUpdateTicked - start", IsEnabled, e?.IsMultipleOf?.ToString());
+
+            if (!IsEnabled) { this.Debug("OnUpdateTicked - not enabled"); return; }
 
             //lockPlayerChests
             if (this.Config.lockPlayerChests) this.LockPlayerChests();
@@ -695,35 +778,40 @@ namespace Always_On_Server
 
             // just turns off server mod if the game gets exited back to title screen
             if (Game1.activeClickableMenu is TitleMenu) IsEnabled = false;
+            this.Debug("OnUpdateTicked - end");
         }
 
         private void FestivalNotification()
         {
-            if (!IsEnabled) return;
-            if (!this.IsClientConnected()) return;
+            this.Debug("FestivalNotification - start", IsEnabled, Game1.otherFarmers.Count);
+            if (!IsEnabled) { this.Debug("FestivalNotification - not enabled"); return; }
+            if (!this.IsClientConnected()) { this.Debug("FestivalNotification - no clients"); return; }
 
             gameClockTicks += 1;
-            if (gameClockTicks < 3) return;
+            if (gameClockTicks < 3) { this.Debug("FestivalNotification - waiting for ticks", gameClockTicks); return; }
 
             var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
-            if (string.IsNullOrEmpty(festivalInfo.Name)) return;
+            if (string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("FestivalNotification - no festival"); return; }
 
-            if (currentTime < 600 && currentTime > 630) return;
+            // skip notification outside of the expected range (not between 600 and 630)
+            if (currentTime < 600 || currentTime > 630) { this.Debug("FestivalNotification - outside time window", currentTime); return; }
 
             this.SendChatMessage($"{festivalInfo.Name} Today!");
             this.SendChatMessage($"I will not be in bed until after . {festivalInfo.End}");
             this.FestivalLoop();
 
             gameClockTicks = 0;
+            this.Debug("FestivalNotification - end");
         }
 
         private void DailyLoop()
         {
-            if (!IsEnabled) return;
-            if (!this.IsClientConnected()) return;
+            this.Debug("DailyLoop - start", IsEnabled, Game1.otherFarmers.Count);
+            if (!IsEnabled) { this.Debug("DailyLoop - not enabled"); return; }
+            if (!this.IsClientConnected()) { this.Debug("DailyLoop - no clients"); return; }
 
             var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
-            if (!string.IsNullOrEmpty(festivalInfo.Name)) return;
+            if (!string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("DailyLoop - festival active, skipping"); return; }
 
             // Check Mail
             if (currentTime == 620)
@@ -742,15 +830,18 @@ namespace Always_On_Server
             {
                 Game1.player.increaseBackpackSize(1);
                 Game1.warpFarmer("Beach", 1, 20, 1);
+                this.Debug("DailyLoop - gave fishing rod");
             }
+            this.Debug("DailyLoop - end");
         }
 
         private Dictionary<string, bool> oneOffEvent = new Dictionary<string, bool>();
         private void oneOffEventLoop()
         {
-            if (currentTime < 630) return;
+            this.Debug("oneOffEventLoop - start", currentTime);
+            if (currentTime < 630) { this.Debug("oneOffEventLoop - too early", currentTime); return; }
 
-            if (!oneOffEvent["SewersUnlock"])
+            if (!oneOffEvent.TryGetValue("SewersUnlock", out var sewers) || !sewers)
             {
                 oneOffEvent["SewersUnlock"] = Game1.player.hasRustyKey;
                 if (Game1.player.hasRustyKey) return;
@@ -763,7 +854,7 @@ namespace Always_On_Server
                 oneOffEvent["SewersUnlock"] = Game1.player.hasRustyKey;
             }
 
-            if (!oneOffEvent["CommunityCenterRun"] &&  this.Config.communitycenterrun)
+            if ((!oneOffEvent.TryGetValue("CommunityCenterRun", out var ccRun) || !ccRun) && this.Config.communitycenterrun)
             {
                 oneOffEvent["CommunityCenterRun"] = Game1.player.eventsSeen.Contains("191393");
                 if (oneOffEvent["CommunityCenterRun"]) return;
@@ -776,7 +867,7 @@ namespace Always_On_Server
                 }
             }
 
-            if (!oneOffEvent["JojaMemberRun"] && !this.Config.communitycenterrun)
+            if ((!oneOffEvent.TryGetValue("JojaMemberRun", out var jojaRun) || !jojaRun) && !this.Config.communitycenterrun)
             {
                 oneOffEvent["JojaMemberRun"] = Game1.player.eventsSeen.Contains("502261");
                 if (oneOffEvent["JojaMemberRun"]) return;
@@ -830,7 +921,7 @@ namespace Always_On_Server
                 }
             }
 
-            if (!oneOffEvent["FishingRod"])
+            if (!oneOffEvent.TryGetValue("FishingRod", out var fishingRod) || !fishingRod)
             {
                 oneOffEvent["FishingRod"] = Game1.player.eventsSeen.Contains("739330");
                 if (oneOffEvent["FishingRod"]) return;
@@ -841,8 +932,10 @@ namespace Always_On_Server
                     Game1.player.increaseBackpackSize(1);
                     Game1.warpFarmer("Beach", 1, 20, 1);
                     Game1.player.eventsSeen.Add("739330");
+                    this.Debug("oneOffEventLoop - fishing rod given");
                 }
             }
+            this.Debug("oneOffEventLoop - end");
         }
 
         /// <summary>Raised after the in-game clock time changes.</summary>
@@ -850,21 +943,25 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         public void OnTimeChanged(object sender, TimeChangedEventArgs e)
         {
-            if (!IsEnabled) return;
+            this.Debug("OnTimeChanged - start", sender?.GetType().Name, e?.GetType().Name, IsEnabled);
+            if (!IsEnabled) { this.Debug("OnTimeChanged - not enabled"); return; }
 
             currentTime = Game1.timeOfDay;
             currentDate = SDate.Now();
 
+            this.Debug("OnTimeChanged - calling loops", currentTime, currentDate.ToLocaleString(false));
             this.FestivalNotification();
 
             this.DailyLoop();
 
             this.oneOffEventLoop();
+            this.Debug("OnTimeChanged - end");
         }
 
         private void GetBedCoordinates()
         {
             int houseUpgradeLevel = Game1.player.HouseUpgradeLevel;
+            this.Debug("GetBedCoordinates - start", houseUpgradeLevel);
 
             switch (houseUpgradeLevel)
             {
@@ -881,15 +978,18 @@ namespace Always_On_Server
                     bedY = 13;
                     break;
             }
+            this.Debug("GetBedCoordinates - result", bedX, bedY);
         }
 
         private void GoToBed()
         {
+            this.Debug("GoToBed - start");
             this.GetBedCoordinates();
             Game1.warpFarmer("Farmhouse", bedX, bedY, false);
 
             this.Helper.Reflection.GetMethod(Game1.currentLocation, "startSleep").Invoke();
             Game1.displayHUD = true;
+            this.Debug("GoToBed - warped to bed", bedX, bedY);
         }
 
         /// <summary>Raised before the game begins writes data to the save file (except the initial save creation).</summary>
@@ -897,7 +997,8 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnSaving(object sender, SavingEventArgs e)
         {
-            if (!IsEnabled) return;
+            this.Debug("OnSaving - start", sender?.GetType().Name, IsEnabled);
+            if (!IsEnabled) { this.Debug("OnSaving - not enabled"); return; }
 
             // shipping menu "OK" click through code
             this.Monitor.Log("This is the Shipping Menu");
@@ -905,6 +1006,7 @@ namespace Always_On_Server
             if (Game1.activeClickableMenu is ShippingMenu)
             {
                 this.Helper.Reflection.GetMethod(Game1.activeClickableMenu, "okClicked").Invoke();
+                this.Debug("OnSaving - shipping menu okClicked invoked");
             }
         }
 
@@ -913,8 +1015,9 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnUnvalidatedUpdateTick(object sender, UnvalidatedUpdateTickedEventArgs e)
         {
+            this.Debug("OnUnvalidatedUpdateTick - start", Game1.timeOfDay);
             //resets server connection after certain amount of time end of day
-            if (Game1.timeOfDay >= this.Config.timeOfDayToSleep || Game1.timeOfDay == 600 && currentDateForReset != danceOfJelliesForReset && currentDateForReset != spiritsEveForReset && this.Config.endofdayTimeOut != 0)
+            if (Game1.timeOfDay >= this.Config.timeOfDayToSleep || (Game1.timeOfDay == 600 && currentDateForReset != danceOfJelliesForReset && currentDateForReset != spiritsEveForReset && this.Config.endofdayTimeOut != 0))
             {
 
                 timeOutTicksForReset += 1;
@@ -922,9 +1025,10 @@ namespace Always_On_Server
                 if (timeOutTicksForReset >= (countdowntoreset + (this.Config.endofdayTimeOut * 60)))
                 {
                     Game1.options.setServerMode("offline");
+                    this.Debug("OnUnvalidatedUpdateTick - set server offline due to timeout");
                 }
             }
-            if (currentDateForReset == danceOfJelliesForReset || currentDateForReset == spiritsEveForReset && this.Config.endofdayTimeOut != 0)
+            if ((currentDateForReset == danceOfJelliesForReset || currentDateForReset == spiritsEveForReset) && this.Config.endofdayTimeOut != 0)
             {
                 if (Game1.timeOfDay >= 2400 || Game1.timeOfDay == 600)
                 {
@@ -933,6 +1037,7 @@ namespace Always_On_Server
                     if (timeOutTicksForReset >= (5040 + (this.Config.endofdayTimeOut * 60)))
                     {
                         Game1.options.setServerMode("offline");
+                        this.Debug("OnUnvalidatedUpdateTick - set server offline special dates");
                     }
                 }
 
@@ -944,6 +1049,7 @@ namespace Always_On_Server
                 if (shippingMenuTimeoutTicks >= this.Config.endofdayTimeOut * 60)
                 {
                     Game1.options.setServerMode("offline");
+                    this.Debug("OnUnvalidatedUpdateTick - set server offline due to shipping menu timeout");
                 }
 
             }
@@ -956,11 +1062,13 @@ namespace Always_On_Server
                 Game1.options.setServerMode("online");
                 timeOutTicksForReset = 0;
                 shippingMenuTimeoutTicks = 0;
+                this.Debug("OnUnvalidatedUpdateTick - morning reset complete");
             }
 
             if (Game1.timeOfDay == 2600)
             {
                 Game1.paused = false;
+                this.Debug("OnUnvalidatedUpdateTick - time 2600 unpaused");
             }
         }
 
@@ -968,32 +1076,42 @@ namespace Always_On_Server
         /// <param name="message">The message text.</param>
         private void SendChatMessage(string message)
         {
+            this.Debug("SendChatMessage - start", message);
             Game1.chatBox.activate();
             Game1.chatBox.setText(message);
             Game1.chatBox.chatBox.RecieveCommandInput('\r');
+            this.Debug("SendChatMessage - sent", message);
         }
 
         /// <summary>Leave the current festival, if any.</summary>
         private void LeaveFestival()
         {
+            this.Debug("LeaveFestival - start");
             Game1.netReady.SetLocalReady("festivalEnd", true);
             Game1.activeClickableMenu = new ReadyCheckDialog("festivalEnd", true, who =>
-                    {
-                    this.GetBedCoordinates();
-                    Game1.exitActiveMenu();
-                    Game1.warpFarmer("Farmhouse", bedX, bedY, false);
-                    // Game1.timeOfDay = currentDate == spiritsEve ? 2400 : 2200;
-                    Game1.timeOfDay = 2200;
-                    Game1.shouldTimePass();
-                    }
-                    );
+                {
+                this.GetBedCoordinates();
+                Game1.exitActiveMenu();
+                Game1.warpFarmer("Farmhouse", bedX, bedY, false);
+                // Game1.timeOfDay = currentDate == spiritsEve ? 2400 : 2200;
+                Game1.timeOfDay = 2200;
+                Game1.shouldTimePass();
+                }
+                );
+            this.Debug("LeaveFestival - end", bedX, bedY);
         }
 
         public object? CallByName(string name, params object[] args)
         {
+            this.Debug("CallByName - start", name, args);
             var m = this.GetType().GetMethod(name);
-            if (m == null) throw new MissingMethodException(name);
-            return m.Invoke(this, args);
+            if (m == null) {
+                this.Debug("CallByName - method not found", name);
+                throw new MissingMethodException(name);
+            }
+            var result = m.Invoke(this, args);
+            this.Debug("CallByName - invoked", name, result);
+            return result;
         }
     }
 }
