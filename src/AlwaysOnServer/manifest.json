@@ -4,7 +4,7 @@
   "Version": "1.0.5",
   "Description": "A Headless server mod.",
   "UniqueID": "moy.Always_On_Server",
-  "EntryDll": "Stardew-Multiplayer-Server.dll",
+  "EntryDll": "AlwaysOnServer.dll",
   "MinimumApiVersion": "4.0",
   "UpdateKeys": [ "Nexus:20659" ]
 }
