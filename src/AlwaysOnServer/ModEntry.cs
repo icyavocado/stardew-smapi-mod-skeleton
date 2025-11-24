@@ -85,6 +85,8 @@ namespace Always_On_Server
 
         private string saveDirectory;
         private const string LogPath = "Mods/AlwaysOnServer/logs.txt";
+        private const long MaxLogBytes = 1_000_000; // 1 MB
+        private const int MaxLogFiles = 5;
         StreamWriter logs;
 
         SDate currentDate = SDate.Now();
@@ -105,11 +107,39 @@ namespace Always_On_Server
                 // log to SMAPI console
                 this.Monitor.Log(msg, LogLevel.Debug);
 
-                // also append to local log file
+                // also append to local log file with rotation to avoid unbounded growth
                 try
                 {
                     var dir = Path.GetDirectoryName(LogPath);
                     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                    // rotate if file exists and is too large
+                    if (File.Exists(LogPath))
+                    {
+                        var fi = new FileInfo(LogPath);
+                        if (fi.Length >= MaxLogBytes)
+                        {
+                            try
+                            {
+                                // delete oldest
+                                string oldest = LogPath + "." + MaxLogFiles;
+                                if (File.Exists(oldest)) File.Delete(oldest);
+
+                                // shift files up: logs.txt.(n-1) -> logs.txt.n
+                                for (int i = MaxLogFiles - 1; i >= 1; i--)
+                                {
+                                    string src = LogPath + "." + i;
+                                    string dest = LogPath + "." + (i + 1);
+                                    if (File.Exists(src)) File.Move(src, dest);
+                                }
+
+                                // move current to .1
+                                File.Move(LogPath, LogPath + ".1");
+                            }
+                            catch (Exception) { /* best-effort rotation, ignore IO errors */ }
+                        }
+                    }
+
                     File.AppendAllText(LogPath, msg + Environment.NewLine);
                 }
                 catch (Exception) { /* don't let file IO break debug logging */ }
@@ -149,8 +179,8 @@ namespace Always_On_Server
             F.Dump("Hi");
             foreach (KeyValuePair<string, int> skill in skills)
             {
-                // Game1.player.setSkillLevel(skill.Key, saveContent.Get($"{skill.Key}Level"));
-                // Game1.player.experiencePoints[skill.Value] = saveContent.Get($"{skill.Key}Experience");
+                Game1.player.setSkillLevel(skill.Key, saveContent.Get($"{skill.Key}Level"));
+                Game1.player.experiencePoints[skill.Value] = saveContent.Get($"{skill.Key}Experience");
             }
         }
 
@@ -159,9 +189,8 @@ namespace Always_On_Server
             F.Dump(saveContent);
             foreach (KeyValuePair<string, int> skill in skills)
             {
-                F.Dump(saveContent);
-                // saveContent.Set($"{skill.Key}Level", Game1.player.GetSkillLevel(skill.Value));
-                // saveContent.Set($"{skill.Key}Experience", Game1.player.experiencePoints[skill.Value]);
+                saveContent.Set($"{skill.Key}Level", Game1.player.GetSkillLevel(skill.Value));
+                saveContent.Set($"{skill.Key}Experience", Game1.player.experiencePoints[skill.Value]);
             }
         }
 
