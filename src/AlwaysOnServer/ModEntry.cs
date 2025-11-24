@@ -459,7 +459,9 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnOneSecondUpdateTicked(object sender, OneSecondUpdateTickedEventArgs e)
         {
-            if (!IsEnabled)
+            this.ProcessCommand();
+
+            if (!IsEnabled && !clientPaused)
             {
                 Game1.netWorldState.Value.IsPaused = false;
                 return;
@@ -467,8 +469,6 @@ namespace Always_On_Server
 
             // Pause the game if noone is connected
             if (Game1.otherFarmers.Count <= 0 || clientPaused) Game1.netWorldState.Value.IsPaused = true;
-
-            this.ProcessCommand();
 
             //Invite Code Copier
             if (this.Config.copyInviteCodeToClipboard)
@@ -607,7 +607,7 @@ namespace Always_On_Server
 
         private void ProcessCommand() {
             this.Debug("ProcessCommand - start", IsEnabled, Context.IsWorldReady);
-            if (!IsEnabled || !Context.IsWorldReady) return;
+            if (!Context.IsWorldReady) return;
 
             List<ChatMessage> messages = this.Helper.Reflection.GetField<List<ChatMessage>>(Game1.chatBox, "messages").GetValue();
 
