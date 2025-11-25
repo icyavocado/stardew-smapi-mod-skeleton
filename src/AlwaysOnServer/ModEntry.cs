@@ -348,7 +348,7 @@ namespace Always_On_Server
 
             Game1.options.pauseWhenOutOfFocus = false;
 
-            this.SaveLandE();
+            this.SaveSkillsAndExp();
             this.SetLandEToMax();
 
             Game1.addHUDMessage(new HUDMessage("Server Mode COMPLETE!"));
@@ -365,7 +365,7 @@ namespace Always_On_Server
 
             Game1.displayHUD = true;
 
-            this.LoadLandE();
+            this.LoadSkillsAndExp();
 
             Game1.addHUDMessage(new HUDMessage("Server Mode Off!"));
             this.Debug("DisableServer - complete", IsEnabled);
