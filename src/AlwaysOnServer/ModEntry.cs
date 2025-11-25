@@ -20,6 +20,7 @@ using SObject = StardewValley.Object;
 
 using Newtonsoft.Json;
 
+using System.Reflection;
 namespace Always_On_Server
 {
     public static class F
@@ -89,6 +90,8 @@ namespace Always_On_Server
         private const int MaxLogFiles = 5;
         StreamWriter logs;
 
+        private string lastCommand = "";
+        private int skipEventInSecond = 0;
         SDate currentDate = SDate.Now();
 
         SDate currentDateForReset = SDate.Now();
@@ -411,6 +414,12 @@ namespace Always_On_Server
         /// <param name="e">The event data.</param>
         private void OnOneSecondUpdateTicked(object sender, OneSecondUpdateTickedEventArgs e)
         {
+
+            if (skipEventInSecond > 0) {
+                skipEventInSecond -= 1;
+                if (skipEventInSecond == 0) this.SkipEvent();
+            }
+
             this.ProcessCommand();
 
             if (!IsEnabled && !clientPaused)
@@ -557,7 +566,12 @@ namespace Always_On_Server
             this.Helper.Reflection.GetMethod(Game1.CurrentEvent, "answerDialogueQuestion").Invoke(Game1.getCharacterFromName("Lewis"), "yes");
         }
 
-        private void ProcessCommand() {
+        private void Teleport(string location, int x, int y)
+        {
+            Game1.warpFarmer(location, x, y, false);
+        }
+
+        public void ProcessCommand() {
             if (!Context.IsWorldReady) return;
 
             List<ChatMessage> messages = this.Helper.Reflection.GetField<List<ChatMessage>>(Game1.chatBox, "messages").GetValue();
@@ -569,10 +583,36 @@ namespace Always_On_Server
             string[] parts = actualmessage?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
             string lastFragment = parts.Length >= 2 ? parts[1] : null;
 
-            if (lastFragment == null || lastFragment.Length == 0 || lastFragment[0] != '!') return;
+            if (lastFragment == null || lastFragment.Length == 0 || lastFragment[0] != '!' || lastFragment == lastCommand) return;
+
+            // Set lastCommand equals lastFragment to stop ProcessCommand runs in a loop if lastFragment is a command
+            lastCommand = lastFragment;
 
             switch (lastFragment)
             {
+                case "!skip":
+                    this.SkipEvent();
+                    break;
+                case "!ExitActiveMenu":
+                    Game1.exitActiveMenu();
+                    break;
+                case "!teleport": // Tested
+                    int x;
+                    int y;
+                    Int32.TryParse( parts[3], out x );
+                    Int32.TryParse( parts[4], out y );
+                    this.Teleport(parts[2], x, y);
+                    break;
+                case "!checkmail": // Tested
+                    this.CheckMail();
+                    break;
+                case "!fishingrod":
+                    this.GetFishingRodCutscene();
+                    break;
+                case "!call":
+                    if (string.IsNullOrEmpty(parts[2])) break;
+                    this.Helper.Reflection.GetMethod(this, parts[2]).Invoke(this);
+                    break;
                 case "!sleep":
                     bool isTimeToSleep = currentTime >=this.Config.timeOfDayToSleep;
                     if (isTimeToSleep) this.GoToBed();
@@ -621,8 +661,8 @@ namespace Always_On_Server
                         this.SendChatMessage("You shall not pause the game.");
                         break;
                     }
-                    Game1.netWorldState.Value.IsPaused = true;
                     clientPaused = true;
+                    Game1.netWorldState.Value.IsPaused = true;
                     this.SendChatMessage("Game Paused");
                     break;
                 case "!unpause":
@@ -630,8 +670,8 @@ namespace Always_On_Server
                         this.SendChatMessage("You shall not un-pause the game.");
                         break;
                     }
-                    Game1.netWorldState.Value.IsPaused = false;
                     clientPaused = false;
+                    Game1.netWorldState.Value.IsPaused = false;
                     this.SendChatMessage("Game UnPaused");
                     break;
                 case "!invite":
@@ -640,6 +680,7 @@ namespace Always_On_Server
                         break;
                     }
                     string inviteCode = Game1.server.getInviteCode();
+                    if (string.IsNullOrEmpty(inviteCode)) { this.Debug("ProcessCommand - no invite code generated."); break; }
                     string outMsg = $"Invite Code: {inviteCode}";
                     if (this.Config.copyInviteCodeToClipboard) {
                         DesktopClipboard.SetText(inviteCode);
@@ -771,12 +812,12 @@ namespace Always_On_Server
         {
             this.Debug("FestivalNotification - start", IsEnabled, Game1.otherFarmers.Count);
             if (!IsEnabled) { this.Debug("FestivalNotification - not enabled"); return; }
-            if (!this.IsClientConnected()) { this.Debug("FestivalNotification - no clients"); return; }
+            if (!Context.HasRemotePlayers) { this.Debug("FestivalNotification - no clients"); return; }
 
             gameClockTicks += 1;
             if (gameClockTicks < 3) { this.Debug("FestivalNotification - waiting for ticks", gameClockTicks); return; }
 
-            var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
+            var festivalInfo = eventDates[currentDate.ToLocaleString(false)];
             if (string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("FestivalNotification - no festival"); return; }
 
             // skip notification outside of the expected range (not between 600 and 630)
@@ -790,34 +831,47 @@ namespace Always_On_Server
             this.Debug("FestivalNotification - end");
         }
 
-        private void DailyLoop()
+        private void CheckMail()
+        {
+            this.Debug("Check Mail - start", Game1.activeClickableMenu);
+            for (int i = 0; i < 10; i++)
+            {
+                this.Helper.Reflection.GetMethod(Game1.currentLocation, "mailbox").Invoke();
+            }
+            Game1.exitActiveMenu();
+        }
+
+        private void GetFishingRodCutscene()
+        {
+            Game1.currentLocation.performTenMinuteUpdate(1000);
+            Game1.player.increaseBackpackSize(1);
+            Game1.warpFarmer("Beach", 1, 20, 1);
+            skipEventInSecond = 2;
+            this.Debug("DailyLoop - gave fishing rod");
+        }
+
+        private void SkipEvent()
+        {
+            Game1.CurrentEvent.skipEvent();
+        }
+
+        public void DailyLoop()
         {
             this.Debug("DailyLoop - start", IsEnabled, Game1.otherFarmers.Count);
             if (!IsEnabled) { this.Debug("DailyLoop - not enabled"); return; }
-            if (!this.IsClientConnected()) { this.Debug("DailyLoop - no clients"); return; }
+            if (!Context.HasRemotePlayers) { this.Debug("DailyLoop - no clients"); return; }
 
-            var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
+            var festivalInfo = eventDates[currentDate.ToLocaleString(false)];
             if (!string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("DailyLoop - festival active, skipping"); return; }
 
             // Check Mail
-            if (currentTime == 620)
-            {
-                for (int i = 0; i < 10; i++)
-                {
-                    this.Helper.Reflection.GetMethod(Game1.currentLocation, "mailbox").Invoke();
-                }
-            }
+            if (currentTime == 620) this.CheckMail();
 
             //go outside
             if (currentTime == 640) Game1.warpFarmer("Farm", 1, 1, false);
 
-            //get fishing rod (standard spam clicker will get through cutscene)
-            if (currentTime == 900 && !Game1.player.eventsSeen.Contains("739330"))
-            {
-                Game1.player.increaseBackpackSize(1);
-                Game1.warpFarmer("Beach", 1, 20, 1);
-                this.Debug("DailyLoop - gave fishing rod");
-            }
+            if (currentTime == this.Config.timeOfDayToSleep) this.GoToBed();
+
             this.Debug("DailyLoop - end");
         }
 
@@ -915,9 +969,7 @@ namespace Always_On_Server
                 //get fishing rod (standard spam clicker will get through cutscene)
                 if (currentTime == 900 && !Game1.player.eventsSeen.Contains("739330"))
                 {
-                    Game1.player.increaseBackpackSize(1);
-                    Game1.warpFarmer("Beach", 1, 20, 1);
-                    Game1.player.eventsSeen.Add("739330");
+                    this.GetFishingRodCutscene();
                     this.Debug("oneOffEventLoop - fishing rod given");
                 }
             }
@@ -1010,7 +1062,7 @@ namespace Always_On_Server
                 if (timeOutTicksForReset >= (countdowntoreset + (this.Config.endofdayTimeOut * 60)))
                 {
                     Game1.options.setServerMode("offline");
-                    this.Debug("OnUnvalidatedUpdateTick - set server offline due to timeout");
+                    // this.Debug("OnUnvalidatedUpdateTick - set server offline due to timeout");
                 }
             }
             if ((currentDateForReset == danceOfJelliesForReset || currentDateForReset == spiritsEveForReset) && this.Config.endofdayTimeOut != 0)
@@ -1022,7 +1074,7 @@ namespace Always_On_Server
                     if (timeOutTicksForReset >= (5040 + (this.Config.endofdayTimeOut * 60)))
                     {
                         Game1.options.setServerMode("offline");
-                        this.Debug("OnUnvalidatedUpdateTick - set server offline special dates");
+                        // this.Debug("OnUnvalidatedUpdateTick - set server offline special dates");
                     }
                 }
 
@@ -1034,7 +1086,7 @@ namespace Always_On_Server
                 if (shippingMenuTimeoutTicks >= this.Config.endofdayTimeOut * 60)
                 {
                     Game1.options.setServerMode("offline");
-                    this.Debug("OnUnvalidatedUpdateTick - set server offline due to shipping menu timeout");
+                    // this.Debug("OnUnvalidatedUpdateTick - set server offline due to shipping menu timeout");
                 }
 
             }
@@ -1047,13 +1099,13 @@ namespace Always_On_Server
                 Game1.options.setServerMode("online");
                 timeOutTicksForReset = 0;
                 shippingMenuTimeoutTicks = 0;
-                this.Debug("OnUnvalidatedUpdateTick - morning reset complete");
+                // this.Debug("OnUnvalidatedUpdateTick - morning reset complete");
             }
 
             if (Game1.timeOfDay == 2600)
             {
                 Game1.paused = false;
-                this.Debug("OnUnvalidatedUpdateTick - time 2600 unpaused");
+                // this.Debug("OnUnvalidatedUpdateTick - time 2600 unpaused");
             }
         }
 
@@ -1086,16 +1138,34 @@ namespace Always_On_Server
             this.Debug("LeaveFestival - end", bedX, bedY);
         }
 
-        public object? CallByName(string name, params object[] args)
+        public object? CallByName(params object[] args)
         {
-            this.Debug("CallByName - start", name, args);
-            var m = this.GetType().GetMethod(name);
-            if (m == null) {
-                this.Debug("CallByName - method not found", name);
-                throw new MissingMethodException(name);
+            if (args == null || args.Length == 0)
+            {
+                throw new ArgumentException("At least one argument (method name) is required", nameof(args));
             }
-            var result = m.Invoke(this, args);
-            this.Debug("CallByName - invoked", name, result);
+
+            // First argument is the method name
+            string methodName = args[0]?.ToString() ?? throw new ArgumentNullException(nameof(args), "Method name cannot be null");
+
+            this.Debug("CallByName - start", methodName, args.Skip(1).ToArray());
+
+            // Get the method with the specified name
+            var m = this.GetType().GetMethod(methodName, BindingFlags.Public | BindingFlags.Instance);
+            if (m == null) m = this.GetType().GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
+            if (m == null)
+            {
+                this.Debug("CallByName - method not found", methodName);
+                throw new MissingMethodException(methodName);
+            }
+            // Pass remaining arguments to the method
+            object[] methodArgs = args.Skip(1).ToArray();
+
+            this.SendChatMessage(Newtonsoft.Json.JsonConvert.SerializeObject(methodArgs));
+
+            var result = m.Invoke(this, methodArgs);
+
+            this.Debug("CallByName - invoked", methodName, result);
             return result;
         }
     }
