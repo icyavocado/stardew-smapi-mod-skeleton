@@ -171,29 +171,8 @@ namespace Always_On_Server
             this.Debug("Entry - events registered");
         }
 
-        private void RestoreLandE(ModData saveContent) {
-            this.Debug("RestoreLandE - start", saveContent);
-            F.Dump("Hi");
-            foreach (KeyValuePair<string, int> skill in skills)
-            {
-                Game1.player.setSkillLevel(skill.Key, saveContent.Get($"{skill.Key}Level"));
-                Game1.player.experiencePoints[skill.Value] = saveContent.Get($"{skill.Key}Experience");
-            }
-        }
-
-        private void BackUpLandE(ModData saveContent) {
-            this.Debug("BackUpLandE - start", saveContent);
-            F.Dump(saveContent);
-            foreach (KeyValuePair<string, int> skill in skills)
-            {
-                saveContent.Set($"{skill.Key}Level", Game1.player.GetSkillLevel(skill.Value));
-                saveContent.Set($"{skill.Key}Experience", Game1.player.experiencePoints[skill.Value]);
-            }
-        }
-
-        private void LoadLandE(ModData? saveContent = null)
+        public void LoadSkillsAndExp(ModData? saveContent = null)
         {
-            this.Debug("LoadLandE - start", saveContent);
             saveDirectory = $"{Constants.SaveFolderName}.json";
 
             // Load save content if none provided
@@ -211,47 +190,21 @@ namespace Always_On_Server
 
             if (saveContent == null)
             {
-                this.Debug("LoadLandE - failed to load saveContent", saveContent, saveDirectory);
+                this.Debug("LoadSkillsAndExp - failed to load saveContent", saveContent, saveDirectory);
                 Game1.chatBox.addInfoMessage("Failed to load save data. Abort.");
                 return;
             }
 
-            this.Debug("LoadLandE - calling RestoreLandE", saveContent);
-            this.RestoreLandE(saveContent);
-        }
-
-        private void Test(string command, string[] args)
-        {
-            this.Debug("Test - start", command, args);
-            if (Context.IsWorldReady)
+            foreach (KeyValuePair<string, int> skill in skills)
             {
-                this.debug = !debug;
-                this.Monitor.Log($"Server Debug {(debug ? "On" : "Off")}", LogLevel.Info);
-                this.Debug("Test - toggled debug", this.debug);
+                Game1.player.setSkillLevel(skill.Key, saveContent.Get($"{skill.Key}Level"));
+                Game1.player.experiencePoints[skill.Value] = saveContent.Get($"{skill.Key}Experience");
             }
         }
 
-        private void Call(string command, string[] args)
-        {
-            this.Debug("Call - start", command, args);
-            if (Context.IsWorldReady)
-            {
-                this.Log(command);
-                this.Debug("Call - invoking CallByName", command);
-                this.CallByName(command);
-            }
-        }
-
-        private void Log(dynamic? obj)
-        {
-            string text = JsonConvert.SerializeObject(obj);
-            this.Monitor.Log(text, LogLevel.Info);
-        }
-
-        private void SaveLandE(ModData? saveContent = null)
+        public void SaveSkillsAndExp(ModData? saveContent = null)
         {
             saveDirectory = $"{Constants.SaveFolderName}.json";
-            this.Log(Constants.SaveFolderName);
 
             // Load existing container if none was provided
             if (saveContent == null)
@@ -272,7 +225,11 @@ namespace Always_On_Server
                 return;
             }
 
-            this.BackUpLandE(saveContent);
+            foreach (KeyValuePair<string, int> skill in skills)
+            {
+                saveContent.Set($"{skill.Key}Level", Game1.player.GetSkillLevel(skill.Value));
+                saveContent.Set($"{skill.Key}Experience", Game1.player.experiencePoints[skill.Value]);
+            }
 
             try
             {
@@ -284,7 +241,7 @@ namespace Always_On_Server
             }
         }
 
-        private void SetLandEToMax() {
+        public void SetLandEToMax() {
             this.Debug("SetLandEToMax - start");
             foreach (KeyValuePair<string, int> skill in skills)
             {
@@ -294,7 +251,6 @@ namespace Always_On_Server
             }
             this.Debug("SetLandEToMax - finished");
         }
-
 
         /// <summary>Raised after the player loads a save slot and the world is initialised.</summary>
         /// <param name="sender">The event sender.</param>
