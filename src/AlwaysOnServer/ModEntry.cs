@@ -478,7 +478,7 @@ namespace Always_On_Server
         {
             this.Debug("FestivalLoop - start", currentDate.ToLocaleString(false), currentTime);
             string key = currentDate.ToLocaleString(false);
-            if (!importantDates.TryGetValue(key, out var festivalInfo)) { this.Debug("FestivalLoop - no festival entry for key", key); return; }
+            if (!eventDates.TryGetValue(key, out var festivalInfo)) { this.Debug("FestivalLoop - no festival entry for key", key); return; }
             if (string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("FestivalLoop - festival name empty"); return; }
 
             dynamic config = this.Config;
@@ -517,7 +517,7 @@ namespace Always_On_Server
             if (festivalInfo.CountDown >= configTimeOut) this.LeaveFestival();
 
             // save changes back to dictionary (tuples are value types)
-            importantDates[key] = festivalInfo;
+            eventDates[key] = festivalInfo;
             this.Debug("FestivalLoop - end", festivalInfo);
         }
 
@@ -584,7 +584,7 @@ namespace Always_On_Server
                     break;
                 case "!festival":
                     this.GoToFestival();
-                    var festivalInfo = importantDates[currentDate.ToLocaleString(false)];
+                    var festivalInfo = eventDates[currentDate.ToLocaleString(false)];
                     if (festivalInfo.Name != "") {
                         this.SendChatMessage(currentTime < festivalInfo.End + 10 ? $"Going to festival {festivalInfo.Name}" : $"Ending festival {festivalInfo.Name}. Go to bed.");
                     } else {
@@ -598,7 +598,7 @@ namespace Always_On_Server
                         break;
                     }
 
-                    festivalInfo = importantDates[currentDate.ToLocaleString(false)];
+                    festivalInfo = eventDates[currentDate.ToLocaleString(false)];
                     if (festivalInfo.Name != "")
                     {
                         eventCommandUsed = true;
@@ -657,7 +657,7 @@ namespace Always_On_Server
         private void GoToFestival() {
             this.Debug("GoToFestival - start", currentDate.ToLocaleString(false), currentTime);
             string key = currentDate.ToLocaleString(false);
-            if (!importantDates.TryGetValue(key, out var festivalInfo)) { this.Debug("GoToFestival - no festival entry", key); return; }
+            if (!eventDates.TryGetValue(key, out var festivalInfo)) { this.Debug("GoToFestival - no festival entry", key); return; }
             if (string.IsNullOrEmpty(festivalInfo.Name)) { this.Debug("GoToFestival - no festival today"); return; }
             if (currentTime >= festivalInfo.Start && currentTime <= festivalInfo.End)
             {
@@ -678,7 +678,7 @@ namespace Always_On_Server
                 this.GoToBed();
             }
 
-            importantDates[key] = festivalInfo;
+            eventDates[key] = festivalInfo;
             this.Debug("GoToFestival - end", festivalInfo);
         }
 
