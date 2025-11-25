@@ -59,7 +59,7 @@ namespace Always_On_Server
         //variables for current time and date
         int currentTime = Game1.timeOfDay;
         SDate today = SDate.Now();
-        Dictionary<string, (string Name, int Start, int End, bool Available, int CountDown, int ResetTick, string Location)> importantDates = new Dictionary<string, (string, int, int, bool, int, int, string)>
+        Dictionary<string, (string Name, int Start, int End, bool Available, int CountDown, int ResetTick, string Location)> eventDates = new Dictionary<string, (string, int, int, bool, int, int, string)>
         {
             { new SDate(13, "spring").ToLocaleString(false), ("eggFestival", 900, 1400, false, 0, 0, "Town") },
             { new SDate(24, "spring").ToLocaleString(false), ("flowerDance", 900, 1400, false, 0, 0, "Forest") },
